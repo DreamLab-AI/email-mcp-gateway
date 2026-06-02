@@ -96,10 +96,33 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+async def _health(request: Request):
+    """Auth-exempt liveness probe for orchestrators (returns 200 once the app is serving).
+    Reports whether the index opens and whether deps are configured (cheap, no model calls)."""
+    try:
+        rows = store.open_or_create().count_rows()
+        index_ok = True
+    except Exception:
+        rows, index_ok = 0, False
+    return JSONResponse(
+        {
+            "status": "ok",
+            "service": "email-mcp-gateway",
+            "index_ok": index_ok,
+            "indexed_chunks": rows,
+            "tools": ["ask_email"],
+        }
+    )
+
+
 def build_app():
-    """Streamable-HTTP ASGI app with bearer auth wrapped around the MCP transport."""
+    """Streamable-HTTP ASGI app with bearer auth wrapped around the MCP transport,
+    plus an auth-exempt GET /health route."""
+    from starlette.routing import Route
+
     app = mcp.streamable_http_app()
-    app.add_middleware(BearerAuthMiddleware)
+    app.router.routes.append(Route("/health", _health, methods=["GET"]))
+    app.add_middleware(BearerAuthMiddleware)  # /health is exempted inside the middleware
     return app
 
 

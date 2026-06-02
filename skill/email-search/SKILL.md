@@ -28,11 +28,15 @@ The gateway is registered as a streamable-HTTP MCP server with bearer auth and c
 up / register it rather than guessing answers:
 
 ```
-claude mcp add --transport http email-gateway https://<host>:<port>/mcp \
+claude mcp add --transport http email-gateway http://<gateway-host>:8765/mcp \
   --header "Authorization: Bearer <token>"
 ```
 
-The first query may be slow (model lazy-loads). Subsequent queries are fast until idle TTL.
+Transport is **plain HTTP + bearer over the trusted LAN** (no TLS unless a reverse proxy is
+put in front — use `http://`, not `https://`). The gateway is at the LAN IP of the host that
+holds the mail/index (e.g. `http://192.168.2.48:8765/mcp`), reachable from any LAN host that
+can route to it. `GET /health` is auth-exempt and returns 200 — use it for readiness checks.
+The first query may be slow (models lazy-load). Subsequent queries are fast until idle TTL.
 
 ## The only tool: `ask_email`
 Use it for ANY personal-email question. Do not fabricate email contents — if `ask_email`
