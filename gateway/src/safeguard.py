@@ -7,6 +7,7 @@ crosses the MCP boundary. On any failure it fails CLOSED (returns a minimal, saf
 from __future__ import annotations
 
 import json
+import re
 
 from openai import OpenAI
 
@@ -32,6 +33,19 @@ def _evidence_payload(chunks: list[RetrievedChunk]) -> str:
             }
         )
     return json.dumps(items, ensure_ascii=False)
+
+
+def _extract_json(raw: str) -> str:
+    """gpt-oss emits harmony channels (analysis/final). Depending on the server, `content`
+    may contain the raw `<|channel|>final<|message|>…` markup rather than parsed text. Take the
+    final channel if present, strip control tokens, and isolate the JSON object."""
+    s = raw
+    marker = "<|channel|>final<|message|>"
+    if marker in s:
+        s = s.rsplit(marker, 1)[1]
+    s = re.sub(r"<\|[^|]*\|>", "", s)          # drop any remaining harmony control tokens
+    a, b = s.find("{"), s.rfind("}")
+    return s[a : b + 1] if (a != -1 and b > a) else s.strip()
 
 
 def _fail_closed(reason: str) -> EgressResult:
@@ -61,6 +75,9 @@ def sanitize(query: str, draft_answer: str, chunks: list[RetrievedChunk]) -> Egr
     )
 
     try:
+        # No response_format=json_object: with gpt-oss's harmony template a JSON grammar
+        # collides with the channel tokens. We instruct JSON in the prompt and parse the
+        # final channel out of the raw output instead.
         resp = _client.chat.completions.create(
             model=config.SAFEGUARD_MODEL,
             messages=[
@@ -68,11 +85,10 @@ def sanitize(query: str, draft_answer: str, chunks: list[RetrievedChunk]) -> Egr
                 {"role": "user", "content": user},
             ],
             temperature=0.0,
-            max_tokens=2048,
-            response_format={"type": "json_object"},
+            max_tokens=3072,
         )
         raw = resp.choices[0].message.content or ""
-        data = json.loads(raw)
+        data = json.loads(_extract_json(raw))
         result = EgressResult.model_validate(data)
     except Exception as e:  # parse / validation / transport failure -> fail closed
         return _fail_closed(str(e))

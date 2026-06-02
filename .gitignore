@@ -39,3 +39,6 @@ node_modules/
 # === Logs / scratch ===
 *.log
 .DS_Store
+
+# === Local compose override (LAN test bind) ===
+docker-compose.override.yml
