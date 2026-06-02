@@ -1,0 +1,21 @@
+Return ONLY valid JSON (no prose, no markdown) matching this shape:
+
+{
+  "answer": string,                      // sanitized natural-language answer to the query
+  "evidence": [
+    {
+      "ref_id": string,                  // copy the opaque ref_id given with each excerpt
+      "sender_role": string,             // bank|employer|family|friend|vendor|government|healthcare|utility|unknown
+      "period": string,                  // bucketed time, e.g. "2024-Q1"
+      "topic": string,                   // coarse topic, e.g. invoice|travel|medical|legal|personal|order|other
+      "abstract": string,                // 1-2 sentence sanitized gist, PII masked
+      "policy_label": "ok" | "redacted" | "dropped"
+    }
+  ],
+  "dropped_count": integer               // number of source excerpts excluded by policy
+}
+
+Rules:
+- Use only ref_ids that were provided. Never invent a ref_id.
+- Items you fully exclude should be reflected in dropped_count and omitted from "evidence".
+- Output must be a single JSON object and nothing else.

@@ -1,0 +1,62 @@
+# Private Email MCP Gateway — self-contained: MCP server + LanceDB + in-container safeguard.
+# Mirrors the GPU/compose pattern from ~/llm-stack/docker-compose.yml.
+# Bring-up is on-demand (start-on-connect) via the MCP activator; `docker compose up` also works.
+services:
+  gateway:
+    build: ./gateway
+    container_name: email-mcp-gateway
+    runtime: nvidia
+    environment:
+      # Pin to GPU1 (has ~27GB free alongside Qwen) for gpt-oss-safeguard-20b (~12-16GB)
+      - NVIDIA_VISIBLE_DEVICES=1
+      # External deps (already running)
+      - QWEN_BASE_URL=http://host.docker.internal:8080/v1   # local abliterated Qwen
+      - QWEN_MODEL=APEX-Q5_K_M.gguf
+      - XINFERENCE_BASE_URL=http://xinference.local:9997/v1     # bge-m3 embeddings
+      - EMBED_MODEL=bge-m3
+      - EMBED_DIM=1024
+      # In-container safeguard (llama-cpp-python serves the GGUF on :8081)
+      - SAFEGUARD_BASE_URL=http://127.0.0.1:8081/v1
+      - SAFEGUARD_MODEL=gpt-oss-safeguard-20b
+      - SAFEGUARD_GGUF=/models/gpt-oss-safeguard-20b-MXFP4.gguf
+      # Storage
+      - MAIL_DIR=/data/mail
+      - INDEX_DIR=/data/index
+      - POLICY_DIR=/data/policy
+      # Proton Mail Bridge (bundled). Log in once: docker exec -it email-mcp-gateway protonctl login
+      - PROTON_BRIDGE_ENABLED=1
+      - IMAP_HOST=127.0.0.1
+      - IMAP_PORT=1143
+      - IMAP_USER=${IMAP_USER}                               # Proton address (set in .env)
+      - IMAP_PASS=${IMAP_PASS}                               # bridge password from `protonctl info`
+      # MCP gateway: streamable HTTP + bearer
+      - MCP_BIND=0.0.0.0:8765
+      - MCP_BEARER_TOKEN=${MCP_BEARER_TOKEN}                 # set in .env, do not commit
+      - REF_SALT=${REF_SALT}                                 # set in .env; rotates ref_ids
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./maildata:/data/mail:ro      # ← drop .mbx/mbox here (READ-ONLY)
+      - ./index:/data/index           # ← LanceDB index (read-write)
+      - ./policy:/data/policy:ro      # ← safeguard policy + egress schema
+      - ./bridge-data:/data/bridge    # ← Proton Bridge vault/keychain (rw, gitignored, SECRET)
+      # Safeguard GGUF lives outside the repo (gitignored); adjust host path as needed:
+      - ../llm-server/models/gpt-oss-safeguard-20b:/models:ro
+    stdin_open: true                  # keep stdin for `docker exec -it protonctl login`
+    tty: true
+    ports:
+      # Gateway listens internally; the start-on-connect activator (scripts/activator.py)
+      # owns the public :8765 and proxies here. For direct LAN access without the activator,
+      # change to "0.0.0.0:8765:8765".
+      - "127.0.0.1:8766:8765"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu, compute, utility]
+    restart: "no"                     # on-demand; the activator starts/stops it
+
+# One-time index build:  docker compose run --rm gateway ingest --rebuild
+# Depends (external, already up): llama.cpp Qwen @ host :8080, xinference @ xinference.local:9997
