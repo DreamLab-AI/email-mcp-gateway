@@ -43,6 +43,10 @@ class Config:
     # --- MCP server ---
     MCP_BIND = _b("MCP_BIND", "0.0.0.0:8765")
     MCP_BEARER_TOKEN = _b("MCP_BEARER_TOKEN", "")
+    # DNS-rebinding protection. Empty (default) => protection OFF (trusted LAN + bearer is the
+    # gate), which is required for LAN clients whose Host header isn't localhost. To lock down,
+    # set a comma list of allowed Host values, e.g. "192.168.2.48:8765,localhost:8765".
+    MCP_ALLOWED_HOSTS = _b("MCP_ALLOWED_HOSTS", "")
 
     # --- Retrieval / generation ---
     TOP_K = int(_b("TOP_K", "8"))

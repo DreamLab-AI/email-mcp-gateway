@@ -89,10 +89,28 @@ connection it runs `docker compose up -d gateway`, waits for health, and proxies
 (`127.0.0.1:8766`). After `IDLE_TTL` (default 900 s) with no connections it `docker compose stop`s
 the gateway to free the GPU. Env: `ACTIVATOR_PORT`, `BACKEND_PORT`, `IDLE_TTL`, `COMPOSE_DIR`.
 
+## LAN access (from another machine)
+
+The gateway runs on the host with the mail/index/GPUs. To reach it from another LAN machine:
+
+1. **Listener binds to the LAN.** The activator already binds `0.0.0.0:8765`; the gateway
+   container publishes to `127.0.0.1:8766` and the activator fronts it. (No firewall changes
+   needed unless the host runs one.)
+2. **DNS-rebinding protection.** The MCP SDK rejects non-localhost `Host` headers by default,
+   which blocks LAN clients. This gateway disables that by default (trusted LAN + bearer is the
+   gate). To lock down instead, set `MCP_ALLOWED_HOSTS` to a comma list of allowed `Host`
+   values, e.g. `MCP_ALLOWED_HOSTS=192.168.2.48:8765,localhost:8765`.
+3. **URL is plain HTTP** on the LAN (add a TLS reverse proxy for `https://`). Use the host's
+   LAN IP, e.g. `http://192.168.2.48:8765/mcp`.
+
 ## Register with the Claude CLI (on-demand MCP)
 
 ```bash
-claude mcp add --transport http email-gateway https://<host>:8765/mcp \
+# from the same host:
+claude mcp add --transport http email-gateway http://localhost:8765/mcp \
+  --header "Authorization: Bearer $MCP_BEARER_TOKEN"
+# from another LAN machine (use the gateway host's LAN IP):
+claude mcp add --transport http email-gateway http://192.168.2.48:8765/mcp \
   --header "Authorization: Bearer $MCP_BEARER_TOKEN"
 ```
 

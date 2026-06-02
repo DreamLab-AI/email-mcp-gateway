@@ -9,6 +9,7 @@ import logging
 
 from dateutil import parser as dtparse
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -19,7 +20,25 @@ from .config import config
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("gateway")
 
-mcp = FastMCP("email-gateway", host=config.host_port()[0], port=config.host_port()[1])
+# Transport security: the SDK defaults to DNS-rebinding protection ON with an empty allow-list,
+# which rejects LAN clients (non-localhost Host header). On a trusted LAN with bearer auth we
+# turn it off by default; set MCP_ALLOWED_HOSTS to re-enable strict Host/Origin validation.
+_allowed = [h.strip() for h in config.MCP_ALLOWED_HOSTS.split(",") if h.strip()]
+if _allowed:
+    _sec = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_allowed,
+        allowed_origins=_allowed,
+    )
+else:
+    _sec = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
+mcp = FastMCP(
+    "email-gateway",
+    host=config.host_port()[0],
+    port=config.host_port()[1],
+    transport_security=_sec,
+)
 
 
 def _epoch(date_str: str | None) -> int | None:
