@@ -52,6 +52,9 @@ class Config:
     TOP_K = int(_b("TOP_K", "8"))
     CHUNK_CHARS = int(_b("CHUNK_CHARS", "3200"))      # ~800 tokens
     CHUNK_OVERLAP = int(_b("CHUNK_OVERLAP", "400"))
+    # Guards against pathological messages (huge inline/base64 bodies) wedging ingest:
+    CHUNK_MAX_BODY_CHARS = int(_b("CHUNK_MAX_BODY_CHARS", "200000"))  # truncate body (~200 KB)
+    CHUNK_MAX_PER_MSG = int(_b("CHUNK_MAX_PER_MSG", "40"))            # cap chunks per message
     QWEN_MAX_TOKENS = int(_b("QWEN_MAX_TOKENS", "1536"))  # room for reasoning + answer
 
     @classmethod
